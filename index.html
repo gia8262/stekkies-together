@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fbf8f3">
+  <title>Stekkies Together · A Rotterdam concept</title>
+  <link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="simulation.css"><link rel="stylesheet" href="theme.css">
+  <script defer src="data.js"></script><script defer src="matching.js"></script><script defer src="simulation.js"></script><script defer src="simulation-view.js"></script><script defer src="app.js"></script>
+</head>
+<body>
+  <header class="header"><a href="#" class="brand" aria-label="Stekkies Together home"><img src="assets/stekkies-logo.svg" alt="Stekkies" class="brand-logo"><span class="brand-addon">together</span></a><nav class="view-switch" aria-label="Demo views"><button class="view-button active" id="tenant-tab" aria-current="page">01 <span>Roommate search</span></button><button class="view-button" id="simulation-tab">02 <span>Market simulation</span></button></nav><div class="header-right"><span class="concept-tag">AI Strategy Lab · Concept demo</span><span class="city"><span class="live-dot"></span> Rotterdam</span></div></header>
+  <main>
+
+    <section id="tenant-view" aria-labelledby="tenant-title">
+      <div class="intro tenant-intro">
+        <div>
+          <p class="eyebrow">ROOMMATE SEARCH</p>
+          <h1 id="tenant-title">Roommates for this home</h1>
+          <p class="lede">Review suggested roommates, rent shares and rental requirements.</p>
+        </div>
+      </div>
+      <div class="journey-layout">
+        <aside class="profile-card"><div class="profile-top"><span class="avatar avatar-alex">A</span><div><span class="tiny-label">YOUR PROFILE</span><h2>Alex, 24</h2><p>Master’s student</p></div></div><div class="profile-line"><span>Monthly budget</span><strong>€850</strong></div><div class="profile-line"><span>Moving in</span><strong>October</strong></div><div class="profile-line"><span>Looking around</span><strong>Kralingen · Centrum</strong></div><div class="profile-preferences"><span class="tiny-label">HOUSEHOLD PREFERENCES</span><div class="chips"><span>Tidy</span><span>Early riser</span><span>Sociable</span></div></div><div class="essential"><span class="small-icon">✓</span><div><strong>Required preference</strong><p>No indoor smoking</p></div></div></aside>
+        <div class="journey-main">
+          <ol class="steps" aria-label="Tenant journey"><li class="current" id="step-home"><span>1</span>The home</li><li id="step-people"><span>2</span>Roommates</li><li id="step-ready"><span>3</span>Summary</li></ol>
+          <div id="home-stage">
+            <article class="home-card"><div class="home-art">
+              <img src="assets/apartment-living-room.jpg" alt="An Amsterdam apartment living room with plants and a street-facing window" width="1600" height="1067">
+            </div>
+              <div class="home-content"><div class="home-heading"><div><p class="eyebrow">KRALINGEN, ROTTERDAM</p><h2>3-bedroom apartment</h2></div><div class="price"><strong>€2,250</strong><span>/ month, excluding bills</span></div></div><div class="home-facts"><span>3 bedrooms</span><span>92 m²</span><span>Available October</span><span>Sharing allowed</span></div><div class="rent-comparison"><div><span>On your own</span><strong>€2,250 <small>over budget</small></strong></div><span class="rent-arrow">→</span><div><span>With 2 roommates</span><strong>€750 <small>each / month</small></strong></div></div><div class="home-bottom"><button class="primary" id="find-roommates">Find roommates for this home <span>↗</span></button></div></div>
+            </article>
+          </div>
+          <div id="people-stage" hidden></div><div id="ready-stage" hidden></div>
+        </div>
+      </div>
+    </section>
+    <section id="simulation-view" hidden aria-labelledby="simulation-title">
+      <div class="market-controls">
+        <div class="simulation-heading"><h1 id="simulation-title">Market simulation</h1><span>Rotterdam · 100 homes</span></div>
+        <div class="population-control"><label for="pool-size">Seeker population</label>
+          <select id="pool-size"><option value="50">50 people</option><option value="150" selected>150 people</option><option value="300">300 people</option></select>
+        </div>
+        <div class="round-control"><label for="round-slider">Round <output id="round-value">0 / 12</output></label>
+          <input type="range" id="round-slider" min="0" max="12" step="1" value="0" aria-label="Simulation round">
+          <div class="slider-ends"><span>Start</span><span>Drag to any round</span><span>End</span></div>
+        </div>
+        <div class="playback-controls">
+          <button class="primary" id="run-simulation">▶ Start</button>
+          <button class="secondary" id="step-simulation">Next →</button>
+          <button class="text-button" id="reset-simulation">Reset ↺</button>
+        </div>
+      </div>
+      <div id="simulation-results"></div>
+      <details class="assumptions"><summary>How the simulation works <span>+</span></summary><div>
+        <p><strong>Each round is calculated.</strong> The selected population enters in 12 batches. Both markets receive the same people in the same order and begin with identical copies of 100 homes. Unmatched seekers stay in the pool. Assigned people and homes leave the available pool.</p>
+        <p><strong>Two matching rules.</strong> Both markets allow solo rentals and occasional self-organized groups. Each round has a 25% seeded chance of one informal group-search opportunity in each market; a group forms only if all requirements are met. This is an illustrative assumption, not a measured success rate. The feature additionally searches systematically for compatible groups in the remaining pool. Budget, location, moving month, landlord requirements and mutual roommate preferences must fit. Groups split the rent equally.</p>
+        <p><strong>Controlled fictional data.</strong> Profiles and homes are fixed, so replaying the same population gives the same outcome. Results are not hardcoded. Each branch evolves separately; early allocations affect later opportunities. This is a simple greedy search, not an optimal allocation.</p>
+        <p><strong>Model boundaries.</strong> Mutual acceptance is assumed. Matched homes are reserved within the simulation, not actually rented. No withdrawals, new listings or real elapsed days are modelled. Income and guarantor rules are fictional. This tests a mechanism, not real-world demand or acceptance.</p>
+      </div></details>
+    </section>
+    <footer><span>stekkies together <span class="footer-separator">/</span> AI Strategy Lab</span><button class="text-button" id="reset-demo">Reset demo ↺</button></footer>
+  </main>
+  <noscript>This interactive demo needs JavaScript enabled.</noscript>
+</body>
+</html>
+
