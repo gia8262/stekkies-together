@@ -22,6 +22,14 @@ treat a `file://` page as an opaque origin, so Chrome and Firefox refuse the bun
 Poppins files and fall back to system fonts. Safari is fine either way. No installation,
 account or internet connection is needed.
 
+## Before you present
+
+Click **Reset everything**, bottom right, so the demo opens on Alex's empty search. If you
+click it by accident later, **Undo** in the notice brings everything back. A refresh returns to
+the screen you were on. Short on time? Turn matching on, open the bell, **Accept** Mina's
+invitation and **Confirm**: the household goes live in two clicks, because Mina has already
+confirmed her side.
+
 ## What to show
 
 1. **Home.** Alex's search returns *0 new matches this week*, and the box says why: 10
@@ -29,6 +37,11 @@ account or internet connection is needed.
    bad search — it is the market.
 2. **Profile.** Turn roommate matching on. It is off by default and the copy says what turning
    it on means: other searchers can see you. Write a description; it appears live on your card.
+   A notice says eight people searching your areas have already asked to team up; they are in
+   the bell, top right. Every invitation says whether you could actually apply with that
+   person, in the grid's own words: Mina's reads *+6 two-bed homes together*, Mina B.'s reads
+   *Moving in November, you in October*. Five of the eight could never apply with Alex, so
+   accepting is a decision rather than a guess.
 3. **Start a household, or two.** Roommates opens on *Your households*. Each one is drawn as a
    **doorbell plate**, the panel of name tags by the door of every Dutch shared house: one tag
    per bedroom, filling as people join, and each tag's bell lights once that person has
@@ -45,15 +58,18 @@ account or internet connection is needed.
    side, and tick **as many of your households as you would consider** — one invitation covers
    a two-bedroom and a three-bedroom at once, rather than two trips through the sheet. Their
    name tag appears on each plate straight away, dashed and marked *invited*, and the card
-   reads *"Luca has not answered yet"*. A toast confirms it with **Undo**. The bell lists it
-   under *Waiting on an answer*, where it can still be withdrawn.
+   reads *"Luca has not answered yet"*. A toast confirms it with **Undo**, and the page scrolls
+   up to the households so you can watch the tag land. The bell lists it under *Waiting on an
+   answer*, where it can still be withdrawn.
 5. **Become them.** Open the account menu, top right, and switch to the person you just
    invited — they are first in the list because they owe you an answer. Your invitation is in
    their bell with your message — several invitations from one person arrive as one card with
    a row per household, each answered on its own. Accepting leaves you looking at the
    household you have just joined: it is pulled to the top of *Your households*, badged
    **Just joined**, with **Confirm my place** as its button. With motion on, your face flies
-   from the account chip onto your new name tag.
+   from the account chip onto your new name tag. Switch back to Alex afterwards and a notice
+   says what happened while he was away: *Luca said yes, and Alex & Luca is ready with 6 homes
+   to apply for.*
 6. **Confirm.** Joining is not agreeing: the household is not live until **every member
    confirms**. When the second one does, the counter runs **0 → 6 homes you can now apply
    for**.
@@ -71,8 +87,12 @@ account or internet connection is needed.
    No documents are uploaded anywhere: the page says so, because a concept demo has no
    business asking for a passport.
 8. **Apply together.** The application is pre-filled with the household's own letter — not a
-   fresh one generated and thrown away — then Stekkies hands you off to the agent's own site,
-   because Stekkies never handles the application itself.
+   fresh one generated and thrown away. **Copy letter and apply** puts it on the clipboard for
+   real, and the hand-off says so (or says copying was blocked), then sends you to the agent's
+   own site, because Stekkies never handles the application itself.
+   **Messages** work the same way: write to your housemate and they answer about where you
+   stand, a day you mention first (*"Saturday works for me. Fingers crossed for Oostzeedijk
+   160."*). If the household is only waiting on them, they confirm as they say so.
 9. **Market impact.** The same 150 people and the same 100 homes, run twice — once where
    everyone searches alone, once where they can team up. Watch both grids fill over 12 rounds.
    At 150 seekers, 26 are housed searching alone and 90 when they can team up. Under each grid
@@ -83,10 +103,10 @@ account or internet connection is needed.
    fictional data, mutual acceptance assumed, greedy allocation.
 
 **Every reversible action can be undone.** Sending, withdrawing and declining invitations,
-*Not for me*, leaving a household and switching roommate matching off each confirm themselves
-in a toast with **Undo**, instead of an "are you sure?" in front of every click. Undo puts the
-whole demo back exactly as it was, and refuses once anything else has changed since, so it
-never throws away newer work.
+*Not for me*, leaving a household, switching roommate matching off and *Reset everything* each
+confirm themselves in a toast with **Undo**, instead of an "are you sure?" in front of every
+click. Undo puts the whole demo back exactly as it was. Once anything else has changed, the
+button goes, so it never throws away newer work.
 
 **One household per size, without doing everything twice.** A household of *n* can only take
 an *n*-bedroom home, so considering two sizes means two households. *Also try as a
@@ -126,7 +146,7 @@ loaded with `defer`.
 | `app.js` | Shell, navigation, home screen, profile editor |
 | `theme.css` | Design tokens and local fonts — the only file that defines a colour |
 | `styles.css` | Everything else |
-| `tests.cjs` | 25 checks over the engine, the fixtures, the database and the store |
+| `tests.cjs` | 77 checks over the engine, the fixtures, the database and the store |
 | `OPERATING-MODEL.md` | The business process behind the feature: AI/human split, unit costs, governance |
 
 Colours, type sizes and radii are tokens in `theme.css`. Every text pair clears WCAG AA

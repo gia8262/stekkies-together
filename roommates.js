@@ -9,7 +9,8 @@ const DemoRoommates = (() => {
     ['routine', 'Daily routine'], ['sociability', 'Sociability']
   ];
   const SIZES = [2, 3, 4];
-  const first = person => String(person.name).split(/[\s,]+/)[0];
+  // The name a person shows, "Mina B.", never a bare first name that two people share.
+  const called = S.shortName;
 
   /* ---------- households ---------- */
 
@@ -35,7 +36,7 @@ const DemoRoommates = (() => {
         <span class="doorbell" aria-hidden="true"></span>
         ${avatar(person, size)}
         <span class="nametag-text">
-          <span class="nametag-name">${esc(first(person))}${person.id === me ? ' <small>(you)</small>' : ''}</span>
+          <span class="nametag-name">${esc(called(person))}${person.id === me ? ' <small>(you)</small>' : ''}</span>
           ${state === 'invited' ? '<small class="nametag-note" aria-hidden="true">invited</small>' : ''}
         </span>
         <span class="visually-hidden">, ${said}</span>
@@ -59,10 +60,10 @@ const DemoRoommates = (() => {
     const free = S.freePlaces(house);
     const reach = S.homesFor(house).length;
     const unconfirmed = house.members.filter(m => !house.confirmedBy.includes(m));
-    const names = list => S.names(list.map(p => ({ name: first(p) })));
+    const names = list => S.names(list.map(p => ({ name: called(p) })));
 
     if (clash) {
-      return { tone: 'clash', text: `${first(clash[0])} and ${first(clash[1])} are not a match`, action: '' };
+      return { tone: 'clash', text: S.clashText(clash), action: '' };
     }
     if (DB.isReady(house)) {
       return reach
@@ -93,7 +94,7 @@ const DemoRoommates = (() => {
         aria-label="More for ${esc(S.nameOf(house))}">⋯</button>
       <div class="menu" id="${id}" popover>
         <button type="button" data-open-house="${house.id}">Open household</button>
-        ${others.map(p => `<button type="button" data-thread="${p.id}">Message ${esc(first(p))}</button>`).join('')}
+        ${others.map(p => `<button type="button" data-thread="${p.id}">Message ${esc(called(p))}</button>`).join('')}
         ${S.alsoSizesFor(house).map(n => `<button type="button" data-also="${house.id}" data-size="${n}">Also search as a ${n}-bedroom</button>`).join('')}
         <button type="button" class="menu-danger" data-leave-household="${house.id}">Leave household</button>
       </div>`;
@@ -106,7 +107,8 @@ const DemoRoommates = (() => {
     const now = standing(house);
     const meta = [
       S.needsSizeChip(house) ? S.sizeLabel(house) : '',
-      `${euros(S.pooledBudget(people))} together`,
+      // "€850 together" read oddly on a household of one.
+      `${euros(S.pooledBudget(people))} ${DB.isFull(house) ? 'together' : 'so far'}`,
       sibling ? `same plan as your ${sibling.house.size}-bedroom` : ''
     ].filter(Boolean);
     // One "open" button stretched over the whole card, with the menu and the action layered
@@ -254,11 +256,11 @@ const DemoRoommates = (() => {
           <p class="sheet-bio">${esc(person.bio)}</p>
 
           <table class="compare">
-            <thead><tr><th scope="col">Household habit</th><th scope="col">You</th><th scope="col">${esc(first(person))}</th></tr></thead>
+            <thead><tr><th scope="col">Household habit</th><th scope="col">You</th><th scope="col">${esc(called(person))}</th></tr></thead>
             <tbody>${ATTRS.map(([k, title]) => {
               const same = mine.lifestyle[k] === person.lifestyle[k];
               const flag = mine.dealbreaker === k ? ' <em>your dealbreaker</em>'
-                : person.dealbreaker === k ? ` <em>${esc(first(person))}’s dealbreaker</em>` : '';
+                : person.dealbreaker === k ? ` <em>${esc(called(person))}’s dealbreaker</em>` : '';
               return `<tr class="${same ? 'same' : 'diff'}"><th scope="row">${title}${flag}</th>
                 <td>${esc(DemoData.labels[k][mine.lifestyle[k]])}</td>
                 <td>${same ? '<span class="visually-hidden">same, </span>' : ''}${esc(DemoData.labels[k][person.lifestyle[k]])}</td></tr>`;
@@ -319,7 +321,7 @@ const DemoRoommates = (() => {
           ${people.map(p => avatar(p, 64)).join('<span class="match-heart" aria-hidden="true">♥</span>')}
         </div>
         <h2>${house ? esc(S.nameOf(house)) : 'Your household'} is ready</h2>
-        <p class="match-sub">${esc(DemoFormat.names(people))} all confirmed.</p>
+        <p class="match-sub">${esc(DemoFormat.names(people))} ${people.length === 2 ? 'both' : 'all'} confirmed.</p>
         <div class="unlock" role="status">
           <span class="unlock-count" data-from="${before}" data-to="${after}">${before}</span>
           <span class="unlock-label">home${after === 1 ? '' : 's'} you can now apply for<br>

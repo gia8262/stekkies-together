@@ -34,7 +34,10 @@
       invites: [],
       threads: {},
       households: [],
-      applications: []
+      applications: [],
+      // A logical clock, so "what happened while you were signed in as someone else" can be
+      // answered exactly. Two clicks inside one millisecond defeat a timestamp.
+      clock: 0
     };
   }
 
@@ -89,6 +92,7 @@
         ? { ...i, status: 'gone' } : i));
     safe.applications = safe.applications.filter(a => a && live.has(a.householdId));
     if (!base(safe.currentUser)) safe.currentUser = data.focalTenant.id;
+    if (!Number.isFinite(safe.clock)) safe.clock = 0;
     return safe;
   }
 
@@ -168,6 +172,17 @@
 
   const euroish = n => '\u20ac' + n.toLocaleString('en-IE');
 
+  const stamp = () => (store.clock = (Number(store.clock) || 0) + 1);
+  /* Whoever is signed in when you switch away is marked as having left at this moment, so
+     the next time they sign in they can be told what happened meanwhile. The record is made
+     if it is missing: an untouched account had none, so it never appeared under "Switch
+     account" and there was no way back to it. */
+  function leave(id) {
+    const leaving = store.currentUser;
+    if (!leaving || leaving === id || !base(leaving)) return;
+    store.accounts[leaving] = { ...(store.accounts[leaving] || { id: leaving }), left: stamp() };
+  }
+
   store = (typeof window !== 'undefined') ? load() : seed(blank());
 
   /* ---------- reading ---------- */
@@ -238,6 +253,7 @@
     householdsOf, householdById, isFull, isConfirmed, isReady, openSlots,
 
     signIn(id) {
+      leave(id);
       if (!store.accounts[id]) store.accounts[id] = { id, roommateMode: true };
       store.currentUser = id;
       save();
@@ -246,6 +262,7 @@
     // Creating an account takes over one of the seeded searchers, which is how a second person
     // can exist without inventing a profile the matcher has never seen.
     createAccount(id, patch) {
+      leave(id);
       store.accounts[id] = { id, roommateMode: true, ...patch };
       store.currentUser = id;
       save();
@@ -304,6 +321,8 @@
       // An invitation withdrawn while the bell was still open must not be accepted anyway.
       if (invite.status !== 'pending') return invite;
       invite.status = status;
+      // When, so the person who asked can be told the answer the next time they sign in.
+      invite.answered = stamp();
       if (status === 'accepted') {
         const house = householdById(invite.householdId);
         // Someone else may have taken the last place, or the household may be gone. Saying so
@@ -329,7 +348,7 @@
     say(from, to, text) {
       const key = pairKey(from, to);
       store.threads[key] = store.threads[key] || [];
-      store.threads[key].push({ from, text, at: Date.now() });
+      store.threads[key].push({ from, text, at: Date.now(), seq: stamp() });
       save();
     },
 
@@ -430,6 +449,7 @@
       const house = householdById(householdId);
       if (house && house.members.includes(personId) && !house.confirmedBy.includes(personId)) {
         house.confirmedBy.push(personId);
+        if (isReady(house) && !house.readyAt) house.readyAt = stamp();
         save();
       }
       return house;
@@ -454,6 +474,10 @@
           if (i.householdId === house.id && i.status === 'pending'
             && (i.to === personId || i.from === personId)) i.status = 'withdrawn';
         });
+        // The people still in it hear about it the next time they sign in.
+        house.departures = [...(house.departures || []), { id: personId, seq: stamp() }];
+        // A household that loses someone is no longer the one everybody agreed to.
+        house.readyAt = 0;
       }
       save();
     },

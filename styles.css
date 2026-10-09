@@ -2563,6 +2563,57 @@ main:focus {
   margin-top:8px;
 }
 
+/* "Withdraw" inherited the page's body size inside the bell, and stood larger than the
+   household it withdraws from. */
+.note-row .linkbutton {
+  font-size:var(--text-xs);
+}
+
+/* An invitation says whether you could actually apply with whoever is asking. */
+.note-fit {
+  margin:8px 0 0;
+  font-size:var(--text-xs);
+  font-weight:600;
+  line-height:1.5;
+}
+
+.note-row-in .note-fit {
+  margin-top:2px;
+}
+
+.note-fit-ok {
+  color:var(--green);
+}
+
+.note-fit-no {
+  color:var(--flag);
+}
+
+.note-fit-meh {
+  color:var(--muted);
+}
+
+/* The hand-off says whether the letter actually reached the clipboard. */
+.handoff-copy {
+  margin:0 0 12px;
+  font-size:var(--text-sm);
+  font-weight:600;
+  color:var(--muted);
+}
+
+.handoff-copy.is-copied {
+  color:var(--green);
+}
+
+.handoff-copy:empty {
+  display:none;
+}
+
+/* A name tag just invited into a household is marked, so you can see where it went. */
+.nametag.is-new {
+  background:var(--blush);
+}
+
 /* A household whose every place already has an invitation out: shown, not offered. */
 .pick button[disabled] {
   opacity:1;
@@ -3264,6 +3315,21 @@ a.button-link {
     z-index:100;
     animation-duration:.42s;
     animation-timing-function:var(--spring);
+  }
+
+  /* ...and with motion, it pops in once and the mark fades, ending as an ordinary tag. */
+  .nametag.is-new {
+    animation:tag-pop .5s var(--spring), tag-fade 1.8s var(--ease-out) .4s forwards;
+  }
+
+  @keyframes tag-pop {
+    from { transform:scale(.9); }
+    to { transform:scale(1); }
+  }
+
+  @keyframes tag-fade {
+    from { background:var(--blush); }
+    to { background:transparent; }
   }
 }
 

@@ -46,7 +46,7 @@ Tests demonstrate that later arrivals can complete groups with earlier waiting s
 
 ## Automated verification
 
-Sixty-four checks pass (`node tests.cjs`):
+Seventy-seven checks pass (`node tests.cjs`):
 
 1. The curated tenant trio qualifies for the featured home; Alex cannot rent it alone.
 2. Dealbreakers apply in both directions.
@@ -163,11 +163,43 @@ Sixty-four checks pass (`node tests.cjs`):
 64. Withdrawing an invitation that was accepted a moment earlier says so, instead of claiming
     it was withdrawn.
 
-**Each of checks 47–64 was run against the code from before they were written, and each fails
-there** — on the exact behaviour it names, or, for 61–62, because the behaviour did not exist —
-then passes on the fixed code. A check that passes either way proves nothing.
+The last thirteen came from rehearsing the demo the way it will be presented, at projector size:
 
-Six harnesses run against the real page, in a DOM and in headless Chrome:
+65. Two people called Mina are never mistaken for each other. Two of the eight people who
+    invite Alex on day one are called Mina, and by first name alone their households read as
+    one person's two searches. People are now called by the name they show, "Mina B.".
+66. **A household of people who could never apply together says why.** Habits were the only
+    conflict checked, so joining someone who moves in November, when you move in October, read
+    "2 of 3 · needs 1 more", as if a third person would fix it. Different months and different
+    areas are now named too, and such a household is not offered at other sizes.
+67. **Every invitation says whether you could apply with whoever is asking**, in the grid's own
+    words: "+6 two-bed homes together" for Mina, "Moving in November, you in October" for
+    Mina B. Five of the eight people who ask Alex could never apply with him.
+68. Switching back to an account tells you what happened while you were away: who said yes or
+    declined, which household went live and with how many homes, who left, and new messages.
+69. An account you never touched can still be switched back to. Alex had no stored record until
+    he changed something, so switching away first thing left no way back to him.
+70. Undo is offered only while it would work: once anything else is written, the button goes,
+    rather than staying on screen to be refused.
+71. Confirming clears the note that asked you to confirm, which used to stay up while the
+    celebration said the household was live.
+72. "Reset everything" can be undone, in case it was a stray click mid-presentation.
+73. Turning matching on says who has already asked.
+74. A notice reads as a sentence: "sent to Luca, for your 2-bedroom search", not "Your".
+75. A reply answers what you wrote and where the two of you stand. It used to ask "what are you
+    looking for?" of someone already in your household; it now answers a day you mention
+    first and talks about a home you applied for, or could.
+76. Someone who is the only one missing confirms when they say so, the way the others already
+    answered a moment after you confirmed.
+77. A household that reaches nothing is not celebrated. Confirming one whose members clash
+    raised the full-screen celebration with "0 homes you can now apply for"; it now says it is
+    confirmed, and why no home is open to all of you.
+
+**Each of checks 47–77 was run against the code from before they were written, and each fails
+there** — on the exact behaviour it names, or, for 61–62 and 68–76, because the behaviour did
+not exist — then passes on the fixed code. A check that passes either way proves nothing.
+
+Eight harnesses run against the real page, in a DOM and in headless Chrome:
 
 - a **crawler** that clicks every control on every screen in four different account states and
   reports anything that changes stored state without changing the screen;
@@ -188,12 +220,22 @@ Six harnesses run against the real page, in a DOM and in headless Chrome:
   page behind it; Escape closes it and leaves you where you were; the card menu opens from the
   keyboard, under its button, and Escape closes it; every target on the feature's screens is
   at least 24×24px (WCAG 2.2, 2.5.8); Show more reaches every workable person; clicking Undo
-  restores exactly the earlier state and is refused after a later change; a hovered toast is
-  held past its seven seconds and leaves once let go;
+  restores exactly the earlier state, and after a later change the button is gone and the
+  action refuses; a hovered toast is held past its seven seconds and leaves once let go;
+- a **presenter pass** of nineteen checks on the rendered page: no "invited you" nudge while
+  your profile is hidden; the nudge counts people, by name when there is one, and opens the
+  bell; every invitation carries its fit line; a household of one reads "so far"; the new name
+  tag is marked where it landed; Undo leaves the toast once it would not work; "both"
+  confirmed; one meaning for "Ready to apply"; the away note; a hand-off that claims nothing
+  that did not happen; no promise of hidden names on the profile; and an undoable reset. Against
+  the code from before, seventeen fail; the two that pass are controls for unchanged behaviour;
+- a **refresh check in Chrome**: a reload mid-demo comes back to the same screen for the same
+  person, a different person gets their own Home, and with session storage blocked the demo
+  still starts;
 - and the **README's demo script**, performed with real clicks (see below), run twice: with
   animation, and with reduced motion. Both must reach the same end state.
 
-All six are clean.
+All eight are clean.
 
 A separate harness drives the real page in a DOM through the whole product: the empty alert
 feed, turning roommate matching on, typing a description and seeing it appear on your own card,

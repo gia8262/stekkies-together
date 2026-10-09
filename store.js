@@ -60,19 +60,25 @@
 
   /* What a household is called. Machine labels like "2-bedroom household" told you the
      schema, not which of your searches this is — so a household carries a name you choose,
-     and falls back to the people in it rather than to its size. */
-  const firstName = person => String(person.name || '').split(/[\s,]+/)[0];
+     and falls back to the people in it rather than to its size.
+
+     People are called by the name they show, "Mina B." and not "Mina": two of the people who
+     invite you on day one are called Mina, and first names alone made their two households
+     read as one person's. */
+  const shortName = person => String((person && person.name) || '');
   function defaultName(house) {
-    const first = membersOf(house).filter(Boolean).map(firstName);
+    const first = membersOf(house).filter(Boolean).map(shortName);
     if (first.length > 1) return `${first.slice(0, -1).join(', ')} & ${first[first.length - 1]}`;
     // One person is named from where the reader stands: yours, or theirs. Every invitation in
     // a fresh bell used to call the sender's household "Your 2-bedroom search".
     const owner = DB.profile(house.members[0]);
     return !owner || owner.id === me().id
       ? `Your ${house.size}-bedroom search`
-      : `${firstName(owner)}’s ${house.size}-bedroom search`;
+      : `${shortName(owner)}’s ${house.size}-bedroom search`;
   }
   const nameOf = house => (house && house.name ? house.name : house ? defaultName(house) : '');
+  // The same name inside a sentence: "sent to Luca for your 2-bedroom search", not "Your".
+  const nameIn = house => (house && !house.name ? defaultName(house).replace(/^Your /, 'your ') : nameOf(house));
   function siblingsOf(house) {
     // Someone you have invited but who has not answered counts: "also searching with Mina as
     // a 3-bedroom" is true from the moment you ask her, which is when the two cards would
@@ -184,15 +190,50 @@
   const ticked = (house, id) => ((house.checklist || {})[id]) || {};
   const allTicked = house => house.members.every(id => CHECKS.every(([k]) => ticked(house, id)[k]));
 
-  /* Two people you invited separately can still be wrong for each other, which makes a
-     household that is full and agreed but reaches nothing. Name them rather than showing a
-     cheerful "Ready" above a zero. */
+  /* Two people you invited separately can still be wrong for each other: on habits, or by
+     moving in different months or searching different areas, which no single home can
+     satisfy. Any of them makes a household that is full and agreed but reaches nothing, so
+     each is named rather than shown as "needs 1 more" or a cheerful "Ready" above a zero. */
   function conflicts(house) {
     const people = membersOf(house), clashes = [];
+    const clash = (group, reason) => Object.assign(group, { reason });
     people.forEach((p, i) => people.slice(i + 1).forEach(o => {
-      if (!matching.mutuallySuitable(p, o)) clashes.push([p, o]);
+      if (!matching.mutuallySuitable(p, o)) clashes.push(clash([p, o], 'habits'));
+      else if (p.moveMonth !== o.moveMonth) clashes.push(clash([p, o], 'month'));
+      else if (!p.districts.some(d => o.districts.includes(d))) clashes.push(clash([p, o], 'areas'));
     }));
+    // Three people can each share an area with one another and still have none in common.
+    if (!clashes.length && people.length > 2
+      && !people[0].districts.some(d => people.every(p => p.districts.includes(d)))) {
+      clashes.push(clash(people.slice(), 'areas'));
+    }
     return clashes;
+  }
+  function clashText(group) {
+    const who = fmt.names(group.map(p => ({ name: shortName(p) })));
+    return group.reason === 'month' ? `${who} move in different months`
+      : group.reason === 'areas' ? `${who} ${group.length > 2 ? 'have no area in common' : 'search different areas'}`
+      : `${who} are not a match`;
+  }
+
+  /* Whether you could apply with everyone already in a household, in one line — what the bell
+     shows under an invitation, so accepting one is a decision rather than a guess. Five of
+     the eight people who ask Alex on day one could never apply with him. */
+  function fitWith(house) {
+    const mine = me();
+    const others = membersOf(house).filter(p => p && p.id !== mine.id);
+    for (const person of others) {
+      if (matching.mutuallySuitable(mine, person) && canSearchTogether(mine, person)) continue;
+      const reason = blockers(person)[0] || 'Not a match on habits';
+      return { tone: 'no', text: others.length > 1 ? `${shortName(person)}: ${reason}` : reason };
+    }
+    // Asked into a pair: what the two of you would reach, in the grid's own words.
+    if (house.size === 2 && others.length === 1) {
+      const n = matching.reachableHomes([mine, others[0]], data.homes).length;
+      return n ? { tone: 'ok', text: `+${n} two-bed home${n === 1 ? '' : 's'} together` }
+        : { tone: 'meh', text: 'A good match, but no two-bed homes in reach yet' };
+    }
+    return { tone: 'ok', text: others.length > 1 ? 'You could apply with all of them' : 'You could apply together' };
   }
 
   // Two people can only ever apply together if they move in the same month and share an area.
@@ -311,6 +352,16 @@
   function announce(house, before) {
     const payload = { householdId: house.id, members: house.members.slice(),
       before, after: homesFor(house).length };
+    /* A household everyone agreed to that reaches nothing is not a party: a full-screen
+       "0 homes you can now apply for" looked broken. It is said plainly, with the reason. */
+    if (!payload.after) {
+      view.celebration = null;
+      const clash = conflicts(house)[0];
+      toast(`${nameOf(house)} is confirmed, but ${clash ? `${clashText(clash)}, so no home is open to all of you`
+        : reachFor(house).length ? 'nothing in reach clears what you declared yet'
+        : 'no home is in reach for your budgets yet'}.`);
+      return;
+    }
     if (view.route === 'roommates' || view.route === 'household') {
       view.celebration = payload;
     } else {
@@ -350,6 +401,43 @@
     view.toast = { id: ++toastSeq, text, undo: Boolean(snap) };
     undoable = snap ? { snap, after: DB.writes } : null;
   }
+  // Undo is only offered while it would work: once anything else has been written, the button
+  // goes, rather than staying on screen to be refused.
+  const canUndo = () => Boolean(undoable && DB.writes === undoable.after);
+
+  /* What happened while you were signed in as somebody else, in a sentence or two. Switching
+     back to Alex after answering as Luca used to show nothing: the household had quietly
+     filled, and the screen never said who had said yes. */
+  function newsFor(id, since) {
+    if (!since) return [];
+    const news = [];
+    const answered = status => DB.state.invites
+      .filter(i => i.from === id && i.status === status && i.answered > since);
+    const who = list => fmt.names(list.map(p => ({ name: shortName(p) })));
+    // A household named after its people reads oddly as an object ("said yes to Alex & Luca"),
+    // so here it is the search it is, unless someone has given it a name.
+    const search = house => (house.name ? house.name : `your ${house.size}-bedroom search`);
+    DB.householdsOf(id).forEach(house => {
+      const joined = answered('accepted').filter(i => i.householdId === house.id).map(i => DB.profile(i.to));
+      const left = (house.departures || []).filter(d => d.seq > since && d.id !== id).map(d => DB.profile(d.id));
+      const ready = DB.isReady(house) && house.readyAt > since;
+      const n = homesFor(house).length;
+      const homes = `${n} home${n === 1 ? '' : 's'} to apply for`;
+      if (joined.length && ready) news.push(`${who(joined)} said yes, and ${nameOf(house)} is ready with ${homes}.`);
+      else if (joined.length) news.push(`${who(joined)} said yes to ${search(house)}.`);
+      else if (ready) news.push(`${nameOf(house)} is ready, with ${homes}.`);
+      if (left.length) news.push(`${who(left)} left ${search(house)}.`);
+    });
+    answered('declined').forEach(i => news.push(`${shortName(DB.profile(i.to))} declined your invitation.`));
+    const from = new Map();
+    Object.entries(DB.state.threads).forEach(([key, lines]) => {
+      if (!key.split('|').includes(id)) return;
+      lines.filter(m => m.from !== id && m.seq > since)
+        .forEach(m => from.set(m.from, (from.get(m.from) || 0) + 1));
+    });
+    from.forEach((n, sender) => news.push(`${n === 1 ? 'A new message' : `${n} new messages`} from ${shortName(DB.profile(sender))}.`));
+    return news;
+  }
 
   // The people grid as a page: by default the people you could actually apply with, everyone on
   // request, a dozen at a time.
@@ -378,7 +466,13 @@
     toggleSwitcher(on) { view.switching = on === undefined ? !view.switching : on; view.notifying = false; notify(); },
     toggleNotifications(on) { view.notifying = on === undefined ? !view.notifying : on; view.switching = false; notify(); },
 
-    signIn(id) { DB.signIn(id); clearPerson(); view.route = 'home'; notify(); toTop(); },
+    signIn(id) {
+      const since = (DB.state.accounts[id] || {}).left;
+      DB.signIn(id); clearPerson(); view.route = 'home';
+      const news = newsFor(id, since);
+      if (news.length) toast(`While you were away: ${news.slice(0, 3).join(' ')}`);
+      notify(); toTop();
+    },
     createAccount(id, patch) { DB.createAccount(id, patch); clearPerson(); view.route = 'profile'; notify(); toTop(); },
     setRoommateMode(on) {
       const mine = me().id;
@@ -395,6 +489,12 @@
       // Switching off takes you out of every household at once, so it is the one that most
       // needs a way back.
       if (!on && left) toast(`Roommate matching is off, and you left ${left} household${left === 1 ? '' : 's'}.`, snap);
+      // Switching on is the moment people can find you, and some already have.
+      const askers = on ? new Set(DB.invitesTo(mine).map(i => i.from)).size : 0;
+      if (askers) {
+        toast(`You are visible to other searchers now. ${askers === 1 ? 'Someone has'
+          : `${askers} people have`} already asked to team up: see the bell, top right.`);
+      }
       notify();
     },
     editMe(patch) { DB.update(me().id, patch); notify(); },
@@ -439,7 +539,9 @@
       // Saying so is the whole fix: the person vanishes from the grid, so without this
       // nothing on screen acknowledges that anything happened.
       if (sentTo.length) {
-        toast(`Invitation sent to ${DB.profile(id).name}: ${fmt.names(sentTo.map(h => ({ name: nameOf(h) })))}.`, snap);
+        toast(`Invitation sent to ${DB.profile(id).name}, for ${fmt.names(sentTo.map(h => ({ name: nameIn(h) })))}.`, snap);
+        // The screen shows where it went: the households it was for, with their new name tag.
+        view.flourish = { kind: 'invited', personId: id, householdIds: sentTo.map(h => h.id) };
       } else {
         toast('Nothing was sent. Pick at least one household with a place free.');
       }
@@ -489,7 +591,7 @@
         view.openThread = null;
         view.justJoined = invite.householdId;
         view.flourish = { kind: 'join', householdId: invite.householdId };
-        if (house) toast(`You joined ${nameOf(house)}. Confirm your place to make it live.`);
+        if (house) toast(`You joined ${nameIn(house)}. Confirm your place to make it live.`);
       }
       notify();
     },
@@ -518,14 +620,24 @@
       if (!text.trim()) return;
       // Captured now: if you switch accounts in the next second, the reply still goes to the
       // person who wrote, not to whoever happens to be signed in when it arrives.
-      const mine = me().id, at = epoch;
-      DB.say(mine, to, text.trim());
+      const mine = me().id, at = epoch, said = text.trim();
+      DB.say(mine, to, said);
       notify();
       // They answer a moment later, so a conversation is possible before anyone commits.
       setTimeout(() => {
         if (at !== epoch) return;
-        const line = reply(to, DB.thread(mine, to).length, mine);
-        if (line) { DB.say(to, mine, line); notify(); }
+        const line = reply(to, DB.thread(mine, to).length, mine, said);
+        if (!line) return;
+        DB.say(to, mine, line.text);
+        // A household waiting only on them: they confirm as they say so, the same way the
+        // others answer a moment after you confirm. Re-read, since it may have changed.
+        const live = line.confirm && DB.householdById(line.confirm);
+        if (live && live.members.includes(to) && live.members.includes(mine)) {
+          const before = homesFor(live).length;
+          DB.confirmHousehold(live.id, to);
+          if (DB.isReady(live) && me().id === mine) announce(live, before);
+        }
+        notify();
       }, 950);
     },
 
@@ -540,7 +652,7 @@
         const source = DB.householdById(householdId);
         toast(!source || !source.members.includes(me().id) ? 'That household no longer exists.'
           : myHouseholds().some(h => h.size === Number(size)) ? `You already run a ${size}-bedroom search.`
-          : `A ${size}-bedroom is too small for everyone in ${nameOf(source)}.`);
+          : `A ${size}-bedroom is too small for everyone in ${nameIn(source)}.`);
       } else {
         const asked = DB.invitesFor(clone.id).map(i => DB.profile(i.to));
         view.justJoined = clone.id;
@@ -575,6 +687,8 @@
       if (!house) return;
       const before = homesFor(house).length;
       DB.confirmHousehold(house.id, mine);
+      // "Confirm your place to make it live" is done now; leaving it up contradicts the card.
+      view.toast = null; undoable = null;
       // Everyone else answers a moment later, so the card visibly completes.
       const others = house.members.filter(m => m !== mine && !house.confirmedBy.includes(m));
       if (others.length) {
@@ -597,7 +711,7 @@
       if (view.justJoined === householdId) view.justJoined = null;
       const house = DB.householdById(householdId);
       const snap = DB.snapshot();
-      const name = house ? nameOf(house) : 'the household';
+      const name = house ? nameIn(house) : 'the household';
       DB.leaveHousehold(householdId, me().id);
       // Leaving used to be one click with no way back. Undo makes it safe without an
       // "are you sure?" in front of every other click.
@@ -626,35 +740,61 @@
     },
 
     reset() {
+      // In front of an audience the footer link is one stray click from wiping the run-through,
+      // so a reset can be taken back like everything else.
+      const snap = DB.snapshot();
       DB.reset();
       epoch++;
       clearPerson();
       view.route = 'home';
       view.filter = 'all';
+      toast('Everything is back to the start.', snap);
       notify();
       toTop();
     }
   };
 
-  function reply(id, turn, mine) {
+  /* What the other person says back. Canned, but about where the two of you actually stand:
+     the old opener asked "what are you looking for?" of someone already in your household,
+     whatever you had written. A day you mention is answered first. */
+  const WHEN = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|tonight|this week|next week|weekend)\b/i;
+  function reply(id, turn, mine, text) {
     const person = DB.profile(id);
-    const shared = DB.householdsOf(mine).find(h => h.members.includes(id));
-    if (turn <= 2) return `Good to hear from you. I can go up to ${fmt.euros(person.budget)} a month — what are you looking for?`;
-    if (turn <= 4) {
-      if (!shared) return 'Sounds good. Which places are you looking at?';
-      const short = DB.openSlots(shared);
-      return short
-        ? `Works for me. We still need ${short} more for a ${shared.size}-bedroom, but I am in.`
-        : `Works for me — that is the ${shared.size}-bedroom full. Confirm and I will too.`;
+    const day = String(text || '').match(WHEN);
+    const lead = !day ? '' : /weekend/i.test(day[0]) ? 'The weekend works for me. '
+      : `${day[0][0].toUpperCase()}${day[0].slice(1).toLowerCase()} works for me. `;
+    const say = (line, confirm) => ({ text: lead + line, confirm });
+    const shared = DB.householdsOf(mine).filter(h => h.members.includes(id));
+    const house = shared.find(DB.isReady) || shared[0];
+    if (!house) {
+      return turn <= 2
+        ? say(`Good to hear from you. I can go up to ${fmt.euros(person.budget)} a month. What are you looking for?`)
+        : say('Sounds good. Which places are you looking at?');
     }
-    if (turn <= 6) return 'Confirm your side and I will do the same.';
-    return 'Sounds good 👍';
+    if (conflicts(house).length) return say(`I am not sure ${nameIn(house)} works for all of us. ${clashText(conflicts(house)[0])}.`);
+    if (DB.isReady(house)) {
+      // A real home: one you have applied for together, or the first you could.
+      const applied = DB.state.applications.filter(a => a.householdId === house.id)
+        .map(a => data.homes.find(h => h.id === a.homeId)).filter(Boolean);
+      const home = applied[0] || homesFor(house)[0];
+      if (!home) return say('We are all confirmed, but nothing clears what we declared yet. Shall we look at the household page together?');
+      return applied.length
+        ? say(`Fingers crossed for ${home.street}. I can do viewings most evenings.`)
+        : say(`We are all set. ${home.street} would be ${fmt.euros(home.rent / house.members.length)} each. Shall we apply?`);
+    }
+    const short = DB.openSlots(house);
+    if (short) return say(`I am in. We still need ${short} more for the ${house.size}-bedroom.`);
+    const waiting = house.members.filter(m => !house.confirmedBy.includes(m));
+    if (waiting.includes(mine)) return say('Confirm your place and I will do the same.');
+    if (waiting.includes(id)) return say('Just confirmed my place.', house.id);
+    return say('We are only waiting on the others to confirm now.');
   }
 
   const api = {
     view, actions, DB,
     me, myHouseholds, readyHouseholds, membersOf, reachFor,
-    nameOf, defaultName, sizeLabel, needsSizeChip, siblingsOf, names: fmt.names,
+    nameOf, nameIn, defaultName, shortName, sizeLabel, needsSizeChip, siblingsOf, names: fmt.names,
+    clashText, fitWith, newsFor, canUndo,
     homesFor, declaredIncome, freePlaces, alsoSizesFor,
     reachableAlone, pooledBudget, pooledIncome,
     candidates, blockers, listings, conflicts, peopleGrid, canSearchTogether, applicationSent,

@@ -8,7 +8,8 @@ const DemoHousehold = (() => {
   'use strict';
   const { esc, euros, avatar, names } = DemoFormat;
   const S = DemoStore, DB = DemoStore.DB;
-  const first = person => String(person.name).split(/[\s,]+/)[0];
+  // The name a person shows, "Mina B.", never a bare first name that two people share.
+  const called = S.shortName;
 
   // Said in words, because a line through a number does not explain itself.
   const EXPLAIN = {
@@ -34,9 +35,9 @@ const DemoHousehold = (() => {
     const free = S.freePlaces(house);
     const pending = S.pendingFor(house);
     const unconfirmed = house.members.filter(m => !house.confirmedBy.includes(m));
-    const list = ids => S.names(ids.map(id => ({ name: first(DB.profile(id)) })));
+    const list = ids => S.names(ids.map(id => ({ name: called(DB.profile(id)) })));
     if (clash) {
-      return { tone: 'clash', text: `${first(clash[0])} and ${first(clash[1])} are not a match, so nothing is open to all of you`, action: '' };
+      return { tone: 'clash', text: `${S.clashText(clash)}, so no home is open to all of you`, action: '' };
     }
     if (DB.isReady(house)) {
       return homes
@@ -85,7 +86,7 @@ const DemoHousehold = (() => {
         <dl class="facts">
           <div><dt>Your ceiling</dt><dd>${euros(c.max)}</dd></div>
           <div><dt>Homes to apply for</dt><dd>${DB.isReady(house) ? homes : '–'}</dd></div>
-          <div><dt>Ready to apply</dt><dd>${ticks} of ${of}</dd></div>
+          <div><dt>Checklist</dt><dd>${ticks} of ${of}</dd></div>
         </dl>
         ${step.action ? `<div class="hh-action">${step.action}</div>` : ''}
       </section>`;
@@ -105,7 +106,7 @@ const DemoHousehold = (() => {
         <div class="moneytable-wrap">
           <table class="moneytable">
             <thead><tr><th scope="col">Per month</th>
-              ${c.rows.map(r => `<th scope="col">${esc(first(r.person))}${r.id === mine ? ' <em>(you)</em>' : ''}</th>`).join('')}
+              ${c.rows.map(r => `<th scope="col">${esc(called(r.person))}${r.id === mine ? ' <em>(you)</em>' : ''}</th>`).join('')}
               <th scope="col" class="total">Together</th></tr></thead>
             <tbody>
               <tr><th scope="row">Budget</th>
@@ -200,7 +201,7 @@ const DemoHousehold = (() => {
       <section class="panel panel-wide">
         <h2>Your shared letter</h2>
         <p class="sub">One letter for the household, sent whenever any of you applies.${
-          by ? ` Last edited by ${esc(first(by))}.` : ''}</p>
+          by ? ` Last edited by ${esc(called(by))}.` : ''}</p>
         <label class="visually-hidden" for="house-letter">Shared application letter</label>
         <textarea id="house-letter" class="letterbox" rows="8"
           data-letter="${house.id}">${esc(text)}</textarea>
@@ -219,7 +220,9 @@ const DemoHousehold = (() => {
     return `
       <section class="panel panel-wide ${done ? 'panel-done' : ''}">
         <div class="panel-head">
-          <h2>${done ? 'Everyone is ready to apply' : 'Ready to apply'}</h2>
+          <!-- Not "Ready to apply": that is what the household's status says once it is live,
+               and the same words for two different things read as a contradiction. -->
+          <h2>${done ? 'Everyone has ticked the checklist' : 'Before you apply'}</h2>
           <span class="progress" role="img" aria-label="${ticks} of ${of} ticked">
             <span class="progress-bar" style="--done:${of ? Math.round(ticks / of * 100) : 0}%"></span>
             <span class="progress-text">${ticks} of ${of}</span>
@@ -233,7 +236,7 @@ const DemoHousehold = (() => {
             const person = DB.profile(id);
             const own = id === mine;
             return `<div class="checkcol">
-              <div class="checkwho">${avatar(person, 28)}<strong>${esc(first(person))}${own ? ' (you)' : ''}</strong></div>
+              <div class="checkwho">${avatar(person, 28)}<strong>${esc(called(person))}${own ? ' (you)' : ''}</strong></div>
               ${S.CHECKS.map(([key, text]) => {
                 const on = Boolean(S.ticked(house, id)[key]);
                 return `<label class="check ${own ? '' : 'readonly'}">
@@ -275,7 +278,7 @@ const DemoHousehold = (() => {
         ${checklist(house)}
       </div>
       <div class="household-foot">
-        ${others.map(p => `<button type="button" class="linkbutton" data-thread="${p.id}">Message ${esc(first(p))}</button>`).join('')}
+        ${others.map(p => `<button type="button" class="linkbutton" data-thread="${p.id}">Message ${esc(called(p))}</button>`).join('')}
         ${also}
         <button type="button" class="linkbutton" data-leave-household="${house.id}">Leave this household</button>
       </div>

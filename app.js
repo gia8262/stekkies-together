@@ -44,7 +44,9 @@
     const houses = S.myHouseholds();
     const ready = S.readyHouseholds();
     const reach = ready.reduce((n, h) => n + S.homesFor(h).length, 0);
-    const invites = DB.invitesTo(me.id).length;
+    // People, not invitations: one person asking you into two households is one person. And
+    // nobody can have found you while your profile is hidden.
+    const askers = me.roommateMode ? [...new Set(DB.invitesTo(me.id).map(i => i.from))] : [];
 
     return `
       <section class="alerts">
@@ -62,9 +64,10 @@
         </div>
       </section>
 
-      ${invites ? `<p class="nudge" role="status">
-        <strong>${invites} ${invites === 1 ? 'person has' : 'people have'} invited you to team up.</strong>
-        <button type="button" class="primary" data-go="roommates">Take a look ↗</button></p>` : ''}
+      ${askers.length ? `<p class="nudge">
+        <strong>${askers.length === 1 ? `${esc(DB.profile(askers[0]).name)} has` : `${askers.length} people have`}
+          invited you to team up.</strong>
+        <button type="button" class="primary" data-open-bell>Take a look</button></p>` : ''}
 
       ${ready.length ? `
         <section class="hero hero-done">
@@ -118,7 +121,7 @@
     const me = S.me(), on = me.roommateMode;
     return `
       <div class="screen-head"><div><h1>Your profile</h1>
-        <p class="sub">This is what other searchers see. Nothing is shared until you both say yes.</p></div></div>
+        <p class="sub">This card is what other searchers see. Your email stays private until you both say yes.</p></div></div>
 
       <div class="profile-grid">
         <div class="profile-form">
@@ -178,8 +181,8 @@
               .map(k => `<span>${esc(DemoData.labels[k][me.lifestyle[k]])}</span>`).join('')}</div>
           </article>
           ${on ? '<button type="button" class="primary full" data-go="roommates">See who is looking <span>↗</span></button>' : ''}
-          <p class="preview-note">Stekkies never collects nationality, ethnicity or religion, and
-            your name and contact details stay hidden until you match.</p>
+          <p class="preview-note">Stekkies never asks for your nationality, ethnicity or religion,
+            and never for documents. Your email is shared only with people you both said yes to.</p>
         </aside>
       </div>`;
   }
@@ -267,6 +270,12 @@
       ${byPerson(waiting, 'from').map(({ id, invites }) => {
         const from = DB.profile(id);
         const message = invites.map(i => i.message).find(Boolean);
+        // Whether you could apply with them, said on the invitation itself: five of the eight
+        // people who ask Alex on day one could never apply with him. Once per card when every
+        // household reads the same, per row when they differ.
+        const fits = invites.map(i => { const h = DB.householdById(i.householdId); return h ? S.fitWith(h) : null; });
+        const same = fits.every(f => f && fits[0] && f.text === fits[0].text);
+        const fit = f => (f ? `<p class="note-fit note-fit-${f.tone}">${f.tone === 'ok' ? '✓ ' : ''}${esc(f.text)}</p>` : '');
         return `<article class="note">
           <div class="note-top">
             ${avatar(from, 36)}
@@ -275,11 +284,13 @@
               <span>${esc(from.role)} · ${euros(from.budget)} · ${esc(from.districts.join(' and '))}</span>
             </div>
           </div>
+          ${same ? fit(fits[0]) : ''}
           ${message ? `<p class="note-msg">“${esc(message)}”</p>` : ''}
-          ${invites.map(invite => {
+          ${invites.map((invite, k) => {
             const house = DB.householdById(invite.householdId);
             return `<div class="note-row note-row-in">
               <p class="note-house">${houseLine(house)}${house ? ` · ${house.members.length} of ${house.size} so far` : ''}</p>
+              ${same ? '' : fit(fits[k])}
               <div class="note-actions">
                 <button type="button" class="ghost small" data-decline="${invite.id}">Decline</button>
                 <button type="button" class="primary" data-accept="${invite.id}">Accept</button>
@@ -334,6 +345,7 @@
 
     renderOverlay();
     renderToast();
+    rememberPlace();
   }
 
   /* Sheets live in a native <dialog>, opened with showModal(): focus stays inside, the page
@@ -382,11 +394,19 @@
       if (toastShowing) { region.innerHTML = ''; toastShowing = 0; clearTimeout(toastTimer); }
       return;
     }
-    if (toast.id === toastShowing) return;
+    // Undo is offered only while it would work. Once anything else has been written the
+    // button goes, rather than staying up to be refused. Removed, not re-rendered, so a
+    // screen reader does not hear the message twice.
+    const undo = toast.undo && S.canUndo();
+    if (toast.id === toastShowing) {
+      const button = region.querySelector('.toast-undo');
+      if (button && !undo) button.remove();
+      return;
+    }
     toastShowing = toast.id;
     region.innerHTML = `<div class="toast">
       <p>${esc(toast.text)}</p>
-      ${toast.undo ? '<button type="button" class="toast-undo" data-undo>Undo</button>' : ''}
+      ${undo ? '<button type="button" class="toast-undo" data-undo>Undo</button>' : ''}
       <button type="button" class="toast-close" data-dismiss-toast aria-label="Dismiss">✕</button>
     </div>`;
     expireToast(toast.id);
@@ -408,16 +428,56 @@
   // browser's, so the view state and the dialog can never disagree.
   $('overlay').addEventListener('cancel', event => { event.preventDefault(); S.actions.closeOverlay(); });
 
+  /* Clipboard access differs by browser, and inside a framed page it can be refused, so this
+     tries the old in-gesture copy first, then the modern call, and reports only what happened.
+     The previous version said "Copied." even when all it had managed was to select the text.
+     The scratch box goes inside the open dialog, if there is one: everything outside a modal
+     dialog is inert and cannot be selected. */
+  function copyText(text) {
+    const host = $('overlay').open ? $('overlay') : document.body;
+    const was = document.activeElement;
+    const box = document.createElement('textarea');
+    box.value = text;
+    box.setAttribute('readonly', '');
+    box.setAttribute('aria-hidden', 'true');
+    box.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+    host.appendChild(box);
+    box.select();
+    let copied = false;
+    try { copied = document.execCommand('copy'); } catch (error) { copied = false; }
+    box.remove();
+    // Selecting the scratch box took focus; give it back to whatever had it.
+    if (was && typeof was.focus === 'function') was.focus({ preventScroll: true });
+    if (copied || !(navigator.clipboard && navigator.clipboard.writeText)) return Promise.resolve(copied);
+    return navigator.clipboard.writeText(text).then(() => true, () => false);
+  }
+
   // Copying the letter is the point of having a shared one, so it has to actually work and
-  // say that it worked.
-  function copyLetter(id) {
-    const box = document.getElementById('house-letter');
-    const note = document.getElementById('copy-note');
+  // say whether it did.
+  function copyLetter() {
+    const box = $('house-letter');
+    const note = $('copy-note');
     if (!box) return;
-    const done = () => { if (note) { note.textContent = 'Copied.'; setTimeout(() => { note.textContent = ''; }, 2200); } };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(box.value).then(done, () => { box.select(); done(); });
-    } else { box.select(); done(); }
+    copyText(box.value).then(copied => {
+      if (!note) return;
+      note.textContent = copied ? 'Copied.' : 'Copying is blocked here. Select the letter and press Ctrl+C or ⌘C.';
+      setTimeout(() => { note.textContent = ''; }, copied ? 2200 : 6000);
+    });
+  }
+
+  // Applying copies the letter for real, so the hand-off can say it is on the clipboard. It is
+  // reported into the hand-off once the copy has settled, and only as what happened.
+  function sendApplication(homeId) {
+    const copying = copyText(DemoListings.letterText(homeId));
+    S.actions.confirmApplication(homeId);
+    copying.then(copied => {
+      const note = $('handoff-copy');
+      if (note) {
+        note.textContent = copied ? '✓ Your letter is copied, ready to paste into their form.'
+          : 'Copying is blocked in this window, so copy the letter yourself before you paste it there.';
+        note.classList.toggle('is-copied', copied);
+      }
+    });
   }
 
   /* A household going live: a brief burst of small houses in the brand colour around the
@@ -465,6 +525,8 @@
     if (S.view.route === 'market') DemoMarket.handle(event);
 
     if (t.closest('#bell')) { S.actions.toggleNotifications(); return; }
+    // "Take a look" on the home screen opens the bell itself: that is where invitations live.
+    if (t.closest('[data-open-bell]')) { S.actions.toggleNotifications(true); return; }
     if (t.closest('#account-chip')) { S.actions.toggleSwitcher(); return; }
     if (S.view.switching && !t.closest('#account-menu') && !t.closest('#account-chip')) S.actions.toggleSwitcher(false);
     if (S.view.notifying && !t.closest('#bell-menu') && !t.closest('#bell')) S.actions.toggleNotifications(false);
@@ -525,7 +587,7 @@
     else if (d.filter) S.actions.setFilter(d.filter);
     else if (d.why) S.actions.toggleWhy(d.why);
     else if (d.apply) S.actions.applyTo(d.apply);
-    else if (d.confirmApply) S.actions.confirmApplication(d.confirmApply);
+    else if (d.confirmApply) sendApplication(d.confirmApply);
     else if (d.set) S.actions.editLifestyle(d.set, d.value);
     else if (d.person) S.actions.openProfile(d.person);
   });
@@ -607,16 +669,38 @@
   const FEATURE = new Set(['roommates', 'household', 'messages']);
   const calm = () => !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const named = (el, name) => { if (el) el.style.viewTransitionName = name; };
+
+  /* A refresh in the middle of a presentation comes back to the same screen, for the same
+     person, instead of dropping everyone back on Home. Per tab, and only a convenience: with
+     storage unavailable the demo simply starts on Home. */
+  const PLACE = 'stekkies.demo.place';
+  function rememberPlace() {
+    try {
+      sessionStorage.setItem(PLACE, JSON.stringify({ user: S.me().id, route: S.view.route,
+        house: S.view.openHouse, thread: S.view.openThread }));
+    } catch (error) { /* a convenience, nothing more */ }
+  }
+  (function returnToPlace() {
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem(PLACE) || 'null'); } catch (error) { return; }
+    if (!saved || saved.user !== S.me().id || !SCREENS[saved.route]) return;
+    S.view.route = saved.route;
+    S.view.openHouse = saved.house || null;
+    S.view.openThread = saved.thread || null;
+  })();
   const houseCard = id => document.querySelector(`.house[data-house="${String(id).replace(/"/g, '')}"]`);
   let lastRoute = S.view.route;
 
   function paint() {
     const from = lastRoute, to = S.view.route;
     lastRoute = to;
-    const flourish = S.takeFlourish();
+    const hint = S.takeFlourish();
+    const flourish = hint && hint.kind === 'join' ? hint : null;
+    const invited = hint && hint.kind === 'invited' ? hint : null;
     const moving = from !== to && FEATURE.has(from) && FEATURE.has(to);
     if (!(moving || flourish) || typeof document.startViewTransition !== 'function' || calm()) {
       render();
+      if (invited) showInvited(invited);
       return;
     }
     // Name, in the old picture, what should travel...
@@ -636,6 +720,22 @@
     transition.finished.finally(() => {
       document.querySelectorAll('[style*="view-transition-name"]').forEach(el => { el.style.viewTransitionName = ''; });
     });
+  }
+
+  /* After an invitation goes out, the screen shows where it went: the household it was for,
+     scrolled into view, with the new name tag lit once. It used to stay on the grid, where the
+     only sign of it was the person disappearing. */
+  function showInvited({ personId, householdIds }) {
+    const quote = value => String(value).replace(/["\\]/g, '');
+    const tags = householdIds
+      .map(id => document.querySelector(`.house[data-house="${quote(id)}"] [data-person-tag="${quote(personId)}"]`))
+      .filter(Boolean);
+    if (!tags.length) return;
+    tags.forEach(tag => tag.classList.add('is-new'));
+    const card = tags[0].closest('.house');
+    if (card && typeof card.scrollIntoView === 'function') {
+      card.scrollIntoView({ block: 'nearest', behavior: calm() ? 'auto' : 'smooth' });
+    }
   }
 
   // A popover opens centred in the top layer by default; put the card menu under its button,

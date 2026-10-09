@@ -1109,7 +1109,197 @@ test('Withdrawing an invitation that was already answered says so', () => {
   assert(/already answered/.test(said()), 'and the screen does not claim it was withdrawn');
   store.actions.reset();
 });
+test('Two people called Mina are never mistaken for each other', () => {
+  // Two of the people who ask Alex on day one are called Mina. By first name alone their
+  // households read "Mina’s 2-bedroom search" and "Mina’s 3-bedroom search": one person's two
+  // searches, which they are not.
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  const me = store.me();
+  const houses = store.DB.invitesTo(me.id).map(i => store.DB.householdById(i.householdId));
+  const owners = houses.map(h => store.nameOf(h).replace(/’s \d-bedroom search$/, ''));
+  assert.equal(new Set(owners).size, owners.length, `each inviting household names a different person: ${owners.join(' | ')}`);
+  assert(owners.includes('Mina') && owners.includes('Mina B.'), 'both Minas are there, called what they show');
+  store.actions.reset();
+});
+test('A household of people who could never apply together says why', () => {
+  // Mina B. suits Alex on habits but moves in November, and he in October. Joining her
+  // three-bedroom used to read "2 of 3 · needs 1 more", as if a third person would fix it.
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  const me = store.me();
+  const invite = store.DB.invitesTo(me.id).find(i => {
+    const p = store.DB.profile(i.from);
+    return p.moveMonth !== me.moveMonth && matching.mutuallySuitable(me, p);
+  });
+  assert(invite, 'someone who suits you but moves in another month has asked');
+  store.actions.respondInvite(invite.id, 'accepted');
+  const house = store.DB.householdById(invite.householdId);
+  const clash = store.conflicts(house);
+  assert.equal(clash.length, 1, 'the timing is named as a conflict');
+  assert.equal(clash[0].reason, 'month');
+  assert(/move in different months/.test(store.clashText(clash[0])), store.clashText(clash[0]));
+  assert.deepEqual(store.alsoSizesFor(house), [], 'and it is not offered at other sizes either');
+  store.actions.reset();
+});
+test('Every invitation says whether you could apply with whoever is asking', () => {
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  const me = store.me();
+  const fit = from => store.fitWith(store.DB.householdById(
+    store.DB.invitesTo(me.id).find(i => i.from === from).householdId));
+  const mina = data.tenants[1];
+  const pair = matching.reachableHomes([me, mina], data.homes).length;
+  assert.deepEqual(fit(mina.id), { tone: 'ok', text: `+${pair} two-bed homes together` },
+    'a good pair says what the two of you would reach, as the grid does');
+  const askers = store.DB.invitesTo(me.id).map(i => store.DB.profile(i.from));
+  const never = askers.filter(p => !(matching.mutuallySuitable(me, p) && store.canSearchTogether(me, p)));
+  assert(never.length >= 3, `several could never apply with Alex (${never.length})`);
+  never.forEach(p => {
+    assert.equal(fit(p.id).tone, 'no', `${p.name} is not shown as a fit`);
+    assert.equal(fit(p.id).text, store.blockers(p)[0], `and the reason is the grid's own: ${fit(p.id).text}`);
+  });
+  store.actions.reset();
+});
+test('Switching back tells you what happened while you were away', () => {
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  const me = store.me();
+  const luca = data.tenants[2];
+  store.actions.startHousehold(2);
+  const house = store.myHouseholds()[0];
+  store.actions.sendInvite(luca.id, [{ id: house.id }], 'hi');
+  store.actions.signIn(luca.id);
+  // An untouched account used to have no record, so it never appeared under "Switch account".
+  assert(store.DB.hasAccount(me.id), 'the account you left can be switched back to');
+  store.actions.respondInvite(store.DB.invitesTo(luca.id).find(i => i.householdId === house.id).id, 'accepted');
+  store.actions.confirmHousehold(house.id);
+  store.DB.say(luca.id, me.id, 'Saturday?');
+  store.actions.signIn(me.id);
+  const news = said();
+  assert(news.startsWith('While you were away: Luca said yes, and Alex & Luca is ready with '), news);
+  assert(news.endsWith('A new message from Luca.'), news);
+  store.actions.signIn(luca.id);
+  store.actions.signIn(me.id);
+  assert.equal(said(), '', 'with nothing new since, nothing is announced');
+  store.actions.reset();
+});
+test('An account you never touched can still be switched back to', () => {
+  // Alex has no account record until he changes something, so switching away straight after
+  // opening the demo left him missing from "Switch account", with no way back.
+  store.actions.reset();
+  store.actions.signIn(data.tenants[2].id);
+  assert(store.DB.hasAccount(data.focalTenant.id), 'the account you left is listed');
+  store.actions.signIn(data.focalTenant.id);
+  assert.equal(store.me().id, data.focalTenant.id);
+  assert.equal(store.me().roommateMode, false, 'and it comes back exactly as it was');
+  store.actions.reset();
+});
+test('Undo is offered only while it would work', () => {
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  store.actions.startHousehold(2);
+  store.actions.sendInvite(store.candidates()[0].person.id, [{ id: store.myHouseholds()[0].id }], 'hi');
+  assert.equal(store.canUndo(), true, 'straight after an action, it can be undone');
+  store.actions.editMe({ bio: 'anything else' });
+  assert.equal(store.canUndo(), false, 'after anything else is written, the toast stops offering it');
+  store.actions.reset();
+});
+test('Confirming clears the note that asked you to confirm', () => {
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  const invite = store.DB.invitesTo(store.me().id)[0];
+  store.actions.respondInvite(invite.id, 'accepted');
+  assert(/Confirm your place/.test(said()), said());
+  store.actions.confirmHousehold(invite.householdId);
+  assert(!/Confirm your place/.test(said()), `still asking after it was done: ${said()}`);
+  store.actions.reset();
+});
+test('A reset can be taken back, in case it was a stray click', () => {
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  store.actions.startHousehold(2);
+  const before = JSON.stringify(store.DB.state);
+  store.actions.reset();
+  assert.equal(store.myHouseholds().length, 0, 'it resets');
+  assert(store.view.toast && store.view.toast.undo && store.canUndo(), 'and offers Undo');
+  store.actions.undo();
+  assert.equal(JSON.stringify(store.DB.state), before, 'which brings everything back');
+  store.actions.reset();
+});
+test('A household that reaches nothing is not celebrated', () => {
+  // Confirming a household whose members clash raised the full-screen celebration with
+  // "0 homes you can now apply for", which looked broken. It says what is wrong instead.
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  const me = store.me();
+  const clashing = data.tenants.find(p => p.id !== me.id && !matching.mutuallySuitable(me, p));
+  store.actions.startHousehold(2);
+  const house = store.myHouseholds()[0];
+  store.actions.sendInvite(clashing.id, [{ id: house.id }], 'hi');
+  store.actions.signIn(clashing.id);
+  store.actions.respondInvite(store.DB.invitesTo(clashing.id).find(i => i.householdId === house.id).id, 'accepted');
+  store.actions.go('roommates');
+  store.actions.confirmHousehold(house.id);
+  assert(store.DB.isReady(store.DB.householdById(house.id)), 'everyone agreed');
+  assert.equal(store.view.celebration, null, 'but there is nothing to celebrate');
+  assert(/is confirmed, but .* are not a match, so no home is open to all of you\./.test(said()), said());
+  store.actions.reset();
+});
+test('Turning matching on says who has already asked', () => {
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  const askers = new Set(store.DB.invitesTo(store.me().id).map(i => i.from)).size;
+  assert(said().includes(`${askers} people have already asked to team up`), said());
+  store.actions.reset();
+});
+test('An invitation toast reads as a sentence', () => {
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  store.actions.startHousehold(2);
+  store.actions.sendInvite(store.candidates()[0].person.id, [{ id: store.myHouseholds()[0].id }], 'hi');
+  assert(/, for your 2-bedroom search\.$/.test(said()), said());
+  store.actions.reset();
+});
 const waitFor = ms => new Promise(r => setTimeout(r, ms));
+later('A reply answers what you said, about where the two of you stand', async () => {
+  // The old reply asked "what are you looking for?" of someone already in your household,
+  // whatever you had written.
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  const me = store.me(), mina = data.tenants[1];
+  const invite = store.DB.invitesTo(me.id).find(i => i.from === mina.id);
+  store.actions.respondInvite(invite.id, 'accepted');
+  store.actions.confirmHousehold(invite.householdId);
+  const house = store.DB.householdById(invite.householdId);
+  assert(store.DB.isReady(house), 'Mina had already confirmed, so it is live');
+  store.actions.say(mina.id, 'Shall we go and see one on Saturday?');
+  await waitFor(1300);
+  const last = store.DB.thread(me.id, mina.id).slice(-1)[0];
+  assert.equal(last.from, mina.id);
+  assert(last.text.startsWith('Saturday works for me.'), last.text);
+  assert(last.text.includes(store.homesFor(house)[0].street), `it talks about a real home: ${last.text}`);
+  store.actions.reset();
+});
+later('Someone who is the only one missing confirms when they say so', async () => {
+  store.actions.reset();
+  store.actions.setRoommateMode(true);
+  const me = store.me(), luca = data.tenants[2];
+  store.actions.startHousehold(2);
+  const house = store.myHouseholds()[0];
+  store.actions.sendInvite(luca.id, [{ id: house.id }], 'hi');
+  store.actions.signIn(luca.id);
+  store.actions.respondInvite(store.DB.invitesTo(luca.id).find(i => i.householdId === house.id).id, 'accepted');
+  store.actions.signIn(me.id);
+  assert.equal(store.DB.isReady(store.DB.householdById(house.id)), false, 'Luca joined but has not confirmed');
+  store.actions.go('messages');
+  store.actions.say(luca.id, 'Ready when you are');
+  await waitFor(1300);
+  assert.equal(store.DB.thread(me.id, luca.id).slice(-1)[0].text, 'Just confirmed my place.');
+  assert(store.DB.isReady(store.DB.householdById(house.id)), 'and did');
+  assert(/is ready/.test(said()), `and the news reaches the screen you are on: ${said()}`);
+  store.actions.reset();
+});
 later('Nothing scheduled before a reset writes into the database after it', async () => {
   store.actions.reset();
   store.actions.setRoommateMode(true);

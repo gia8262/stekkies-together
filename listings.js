@@ -91,24 +91,40 @@ const DemoListings = (() => {
       + `\nI can view at short notice.`;
   }
 
-  function application(homeId) {
+  // Who would apply for a home, and the question its listing leaves open, if any.
+  function applying(homeId) {
     const home = DemoData.homes.find(h => h.id === homeId);
     const row = S.listings().find(e => e.home.id === homeId);
     const house = row && row.house;
     const group = house ? S.membersOf(house) : [S.me()];
+    const status = DemoMatching.sharingStatus(home, group.length);
+    const question = status === 'permit-required'
+      ? `Does the property hold a valid room-rental permit for ${group.length} tenants?`
+      : status === 'unclear' ? 'Is sharing with independent tenants allowed here?' : '';
+    return { home, house, group, question };
+  }
+
+  // The exact words an application sends, for the clipboard: the same letter the sheet shows.
+  function letterText(homeId) {
+    const { home, house, group, question } = applying(homeId);
+    return [house ? S.letterFor(house, home) : defaultLetter(home, group), question].filter(Boolean).join('\n\n');
+  }
+
+  function application(homeId) {
+    const { home, house, group, question } = applying(homeId);
     const detail = review(home, group, house);
     const sent = DB.applied(house ? house.id : S.me().id, homeId);
-    const question = detail.status === 'permit-required'
-      ? `Does the property hold a valid room-rental permit for ${group.length} tenants?`
-      : detail.status === 'unclear' ? 'Is sharing with independent tenants allowed here?' : '';
     if (sent) {
       return `<div class="sheet handoff" aria-label="Application sent">
         <button type="button" class="sheet-close" data-close aria-label="Close">✕</button>
         <span class="handoff-mark" aria-hidden="true">↗</span>
         <h2>Off to the agent</h2>
-        <p class="sheet-sub">Your application is copied and ${esc(home.street)} is opening on
-          <strong>${esc(home.agent.toLowerCase().replace(/[^a-z]/g, ''))}.nl</strong>. Stekkies never
-          handles the application or the lease — it gets you to the front of the queue.</p>
+        <p class="sheet-sub">${esc(home.agent)} takes applications for ${esc(home.street)} on
+          <strong>${esc(home.agent.toLowerCase().replace(/[^a-z]/g, ''))}.nl</strong>, so that is
+          where you finish. Stekkies never handles the application or the lease — it gets you to
+          the front of the queue.</p>
+        <!-- Filled in once the copy has actually happened, so it never claims one that failed. -->
+        <p class="handoff-copy" id="handoff-copy" role="status"></p>
         <dl class="pairs">
           <div><dt>Applying as</dt><dd>${esc(names(group))}</dd></div>
           <div><dt>Your share</dt><dd>${euros(home.rent / group.length)} a month</dd></div>
@@ -148,7 +164,7 @@ const DemoListings = (() => {
       ${question ? '<p class="sheet-note">A question was added automatically because this listing’s sharing status could not be verified.</p>' : ''}
       <div class="sheet-actions">
         <button type="button" class="ghost" data-close>Not yet</button>
-        <button type="button" class="primary" data-confirm-apply="${home.id}">Send and open the listing <span>↗</span></button>
+        <button type="button" class="primary" data-confirm-apply="${home.id}">Copy letter and apply <span>↗</span></button>
       </div>
     </div>`;
   }
@@ -199,5 +215,5 @@ const DemoListings = (() => {
                  <button type="button" class="ghost small" data-filter="all">Show all listings</button></div>`}`;
   }
 
-  return { screen, application, review };
+  return { screen, application, review, letterText };
 })();
