@@ -9,12 +9,18 @@
     const allocations = { baseline: state.baseline.allocations, enhanced: state.enhanced.allocations };
     const summarize = values => {
       const matched = values.reduce((sum, a) => sum + a.people.length, 0);
-      return { matched, rate: matched / people.length * 100, groups: values.filter(a => a.people.length > 1).length, homes: values.length, unmatched: people.length - matched };
+      return {
+        matched,
+        rate: matched / people.length * 100,
+        groups: values.filter(a => a.people.length > 1).length,
+        homes: values.length,
+        unmatched: people.length - matched
+      };
     };
     return { size: people.length, baseline: summarize(allocations.baseline), enhanced: summarize(allocations.enhanced), allocations };
   }
   function runAll() { return data.SETTINGS.sizes.map(run); }
-  function createMarket(size, rounds = 12) {
+  function createMarket(size, rounds = data.SETTINGS.rounds) {
     if (!Number.isInteger(size) || size < 1 || size > data.tenants.length) throw new RangeError('Invalid population');
     if (!Number.isInteger(rounds) || rounds < 1) throw new RangeError('Invalid round count');
     const branch = () => ({ allocations: [], waiting: [], latest: [] });
@@ -29,34 +35,47 @@
     return seed / 4294967296 < data.SETTINGS.informalOpportunityRate;
   }
 
+  // One round settles in the order the model describes. Solo rentals first, available to
+  // both markets. Then shared sharing homes are walked once, cheapest rent per bedroom
+  // first. Both markets spend the same informal (self-organized) budget on that walk:
+  // at most one group, and only on a seeded opportunity round. Together alone keeps
+  // walking afterwards, and those later groups are the ones the platform is responsible
+  // for. The 'informal' allocations are therefore the counterfactual — the households
+  // that would have formed without the feature — not a second kind of platform match.
   function settle(branch, homes, allowGroups, round, informalSearch) {
     const usedHomes = new Set(branch.allocations.map(a => a.home.id));
-    let availableHomes = homes.filter(h => !usedHomes.has(h.id));
-    const added = matching.allocateSolo(branch.waiting, availableHomes).map(a => ({ ...a, formation: 'individual' }));
-    const usedPeople = new Set(added.flatMap(a => a.people.map(t => t.id)));
-    added.forEach(a => usedHomes.add(a.home.id));
-    if (informalSearch || allowGroups) {
-      availableHomes = homes.filter(h => !usedHomes.has(h.id) && h.sharingAllowed)
-        .sort((a, b) => a.rent / a.bedrooms - b.rent / b.bedrooms || a.id.localeCompare(b.id));
-      let informalUsed = false;
-      for (const home of availableHomes) {
-        if (!allowGroups && informalUsed) break;
-        const group = matching.findGroup(home, branch.waiting.filter(t => !usedPeople.has(t.id)));
-        if (group) {
-          group.forEach(t => usedPeople.add(t.id));
-          const formation = informalSearch && !informalUsed ? 'informal' : 'platform';
-          added.push({ home, people: group, formation });
-          if (formation === 'informal') informalUsed = true;
-        }
-      }
+    const usedPeople = new Set();
+    const added = [];
+    const record = (home, people, formation) => {
+      people.forEach(person => usedPeople.add(person.id));
+      usedHomes.add(home.id);
+      added.push({ home, people, formation });
+    };
+    const stillWaiting = () => branch.waiting.filter(person => !usedPeople.has(person.id));
+
+    matching.allocateSolo(branch.waiting, homes.filter(h => !usedHomes.has(h.id)))
+      .forEach(a => record(a.home, a.people, 'individual'));
+
+    const sharable = homes.filter(h => !usedHomes.has(h.id) && h.sharingAllowed)
+      .sort((a, b) => a.rent / a.bedrooms - b.rent / b.bedrooms || a.id.localeCompare(b.id));
+    let informalBudget = informalSearch ? 1 : 0;
+    for (const home of sharable) {
+      if (!informalBudget && !allowGroups) break;
+      const group = matching.findGroup(home, stillWaiting());
+      if (!group) continue;
+      record(home, group, informalBudget ? 'informal' : 'platform');
+      if (informalBudget) informalBudget--;
     }
+
     branch.latest = added.map(a => ({ ...a, round }));
     branch.allocations.push(...branch.latest);
-    branch.waiting = branch.waiting.filter(t => !usedPeople.has(t.id));
+    branch.waiting = stillWaiting();
   }
 
   // A stateful round: new seekers enter, waiting seekers are reconsidered, and
-  // allocations remain reserved. Each counterfactual market owns its inventory.
+  // allocations remain reserved. Both branches read the same shared, never-mutated home
+  // fixtures; independence comes from each branch tracking its own assigned homes, so a
+  // home can end up let to different people — or to nobody — in the two markets.
   function stepMarket(state) {
     if (state.round >= state.rounds) return state;
     state.round++;
@@ -73,7 +92,7 @@
     return state;
   }
   // Rebuild the same deterministic timeline when scrubbing in either direction.
-  function seekMarket(size, round, rounds = 12) {
+  function seekMarket(size, round, rounds = data.SETTINGS.rounds) {
     if (!Number.isInteger(round) || round < 0 || round > rounds) throw new RangeError('Invalid round');
     const state = createMarket(size, rounds);
     while (state.round < round) stepMarket(state);

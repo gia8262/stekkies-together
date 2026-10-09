@@ -1,3 +1,7 @@
+/* Design tokens and local fonts. Loaded first: every other stylesheet consumes these and
+   defines no colours of its own. One definition per token — nothing here is re-declared
+   downstream, so a value can be changed in exactly one place. */
+
 @font-face {
   font-family:Inter;
   src:url('assets/inter-variable.woff2') format('woff2');
@@ -14,246 +18,50 @@
   font-display:swap;
 }
 
-.brand-logo {
-  width:116px;
-  height:auto;
-  display:block;
-}
-
-/* Shared Stekkies-inspired shell, separate from product and simulation components. */
 :root {
-  --paper:#fffbf6;
-  --ink:#212529;
-  --muted:#6b7077;
-  --coral:#f45d48;
-  --coral-dark:#d7412d;
+  /* Brand accents */
+  /* The real Stekkies brand colour, taken from assets/stekkies-logo.svg. */
+  --coral:#f16259;
+  --coral-hover:#f4756d;
+  --coral-dark:#c53725;
   --green:#267b69;
   --solo-blue:#376be3;
+
+  /* Grounds */
+  --paper:#fffbf6;
+  --white:#fff;
+  --shell:#fffdf9;
   --mint:#eaf6ef;
   --line:#e8e4e0;
-  --yellow:#ffcb44;
+  --surface-lilac:#f2effb;
+  --surface-switch:#f0edf6;
+  --surface-tile:#f0eff5;
+  --flag-ground:#fdf4e3;
+  --blush:#fff1ef;
+  --sky:#eef3fd;
+
+  /* Text. Every value clears WCAG AA 4.5:1 on every ground above; --figure is
+     non-text (the queue SVGs) and clears the 3:1 minimum for graphics. */
+  --ink:#212529;
+  --muted:#5f6570;
+  --figure:#7e7e8d;
+  --flag:#8a5a00;
+
+  /* Type. Fluid via the root size, so the whole scale responds to the viewport while
+     staying in rem — browser and OS text scaling still work, and nothing lands below
+     11px effective. The rem term in the clamp is what keeps zoom functional. */
+  font-size:clamp(1rem, 0.96rem + 0.2vw, 1.125rem);
+  --text-xs:0.6875rem;
+  --text-sm:0.75rem;
+  --text-md:0.8125rem;
+  --text-lg:0.875rem;
+  --text-xl:1rem;
+
+  /* Shape */
+  --radius:20px;
+
   font-family:Inter,'Segoe UI',Arial,sans-serif;
-}
-
-body {
+  color:var(--ink);
   background:var(--paper);
+  font-synthesis:none;
 }
-
-.header {
-  max-width:none;
-  min-height:70px;
-  padding:12px 28px;
-  gap:24px;
-  background:#fffdf9;
-}
-
-.brand {
-  color:var(--coral);
-  font-size:33px;
-  letter-spacing:-2px;
-}
-
-.brand-addon {
-  font-size:12px;
-  font-weight:600;
-}
-
-.header .view-switch {
-  margin-left:auto;
-  margin-right:auto;
-  background:#f0edf6;
-  padding:4px;
-  border-radius:30px;
-  flex-shrink:0;
-}
-
-.view-button {
-  font-size:12px;
-  padding:10px 17px;
-  border-radius:24px;
-}
-
-.view-button.active {
-  background:white;
-  box-shadow:0 2px 7px #3927ff10;
-  color:#322a6b;
-}
-
-.header-right {
-  gap:17px;
-  font-size:11px;
-}
-
-.concept-tag {
-  font-size:10px;
-}
-
-main {
-  max-width:none;
-  width:100%;
-  padding:18px 28px 0;
-}
-
-h1,h2,h3 {
-  font-family:Poppins,Inter,'Segoe UI',Arial,sans-serif;
-}
-
-.primary {
-  background:var(--coral);
-  color:white;
-  border-radius:30px;
-  box-shadow:none;
-  font-size:12px;
-  font-weight:600;
-}
-
-.primary:hover {
-  background:#e64d39;
-}
-
-.secondary {
-  border-radius:30px;
-  border-color:#dbd7e3;
-  font-size:12px;
-}
-
-.text-button {
-  font-size:11px;
-}
-
-#tenant-view {
-  max-width:1250px;
-  margin:0 auto;
-}
-
-.tenant-intro {
-  margin:14px 0 25px;
-}
-
-.tenant-intro h1 {
-  font-size:34px;
-  font-weight:700;
-  letter-spacing:-1px;
-}
-
-.profile-card {
-  background:#f2effb;
-  border-color:#e6e0f3;
-}
-
-.profile-top,.profile-preferences {
-  border-color:#ded8e9;
-}
-
-.avatar-alex {
-  background:#ffdf88;
-}
-
-.avatar-mina {
-  background:#d7eadd;
-}
-
-.avatar-luca {
-  background:#d2dfff;
-}
-
-.home-card,.group-panel,.ready-panel {
-  box-shadow:0 5px 20px #30214405;
-  border-color:#e8e2ea;
-}
-
-.home-art {
-  height:230px;
-}
-
-.rent-comparison,.rent-details {
-  background:#f2f7f0;
-  border-color:#dce8d8;
-}
-
-footer {
-  margin-top:16px;
-  padding:14px 0;
-  font-size:10px;
-}
-
-.assumptions {
-  background:#f6f3ee;
-}
-
-@media(min-width:1500px) {
-  main {
-    padding:18px 32px 0;
-  }
-  .header {
-    padding:12px 32px;
-  }
-  .intro {
-    margin:14px 0 25px;
-  }
-  .home-art {
-    height:250px;
-  }
-}
-
-@media(max-width:1000px) {
-  .header {
-    padding:12px 20px;
-    gap:12px;
-  }
-  .concept-tag {
-    display:none;
-  }
-  main {
-    padding:16px 20px 0;
-  }
-  .header-right {
-    font-size:11px;
-  }
-  .brand-addon {
-    margin-left:10px;
-    padding-left:10px;
-  }
-  .header .view-switch {
-    margin-right:auto;
-  }
-}
-
-@media(max-width:700px) {
-  .header {
-    flex-wrap:wrap;
-    gap:10px;
-    padding:10px 16px;
-  }
-  .header .view-switch {
-    order:3;
-    margin:0;
-    width:100%;
-    justify-content:center;
-  }
-  .header-right {
-    margin-left:auto;
-  }
-  .brand {
-    font-size:29px;
-  }
-  main {
-    padding:12px 12px 0;
-  }
-  .tenant-intro h1 {
-    font-size:28px;
-  }
-  .tenant-intro {
-    margin:10px 0 20px;
-  }
-  .home-art {
-    height:190px;
-  }
-  .view-button {
-    flex:1;
-  }
-  .brand-addon {
-    font-size:11px;
-  }
-}
-
